@@ -19,11 +19,14 @@ except Exception:
     st.error("API Key missing! Please set GEMINI_API_KEY in Streamlit Advanced Settings.")
     client = None
 
+# Comprehensive system prompt guiding Gemini on how to handle text, images, and audio
 SYSTEM_INSTRUCTION = (
     "You are a warm, encouraging, and patient scheduling and learning assistant for a child. "
     "Speak entirely in clear, friendly Hindi (Devanagari script). Keep sentences short and easy to understand. "
-    "Actively praise the child to build confidence. If they upload a picture of handwriting, point out "
-    "spelling/grammar errors gently and explain corrections in simple Hindi."
+    "Actively praise the child to build confidence. "
+    "CRITICAL IMAGE RULE: If the user uploads an image, it is a photo of their Hindi handwriting. "
+    "Transcribe it, point out any spelling or grammar errors gently, and explain the correction in simple Hindi. "
+    "CRITICAL AUDIO RULE: If the user sends audio, listen to what they said in Hindi and reply normally to their conversation."
 )
 
 if "chat_session" not in st.session_state and client:
@@ -45,7 +48,7 @@ def play_hindi_speech(text_to_speak):
     except Exception as e:
         st.error("Could not generate speech output right now.")
 
-# --- SIDEBAR: INTERFACE FOR HANDWRITING AND PATTERNS ---
+# --- SIDEBAR: INTERFACE FOR HANDWRITING ---
 st.sidebar.header("📝 2. Check Handwriting")
 st.sidebar.write("Upload a picture of your Hindi writing here!")
 uploaded_file = st.sidebar.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
@@ -55,9 +58,8 @@ if uploaded_file and client:
     st.sidebar.image(img, caption="Your Writing", use_container_width=True)
     if st.sidebar.button("Analyze My Writing (गलतियां सुधारें)"):
         with st.spinner("Gemini Teacher is analyzing your writing..."):
-            response = st.session_state.chat_session.send_message(
-                message=["कृपया इस लिखावट को देखें। बच्चे ने क्या लिखा है उसे बताएं और अगर कोई व्याकरण या वर्तनी की गलती है तो प्यार से सुधारें।", img]
-            )
+            # FIX: Send ONLY the PIL Image object directly. System instructions tell it what to do.
+            response = st.session_state.chat_session.send_message(img)
             st.session_state.messages.append({"role": "user", "text": "📸 [Uploaded a photo of my handwriting]"})
             st.session_state.messages.append({"role": "assistant", "text": response.text})
             st.rerun()
@@ -79,12 +81,11 @@ audio_file = st.audio_input("Tap the microphone below to talk in Hindi:")
 if audio_file and client:
     with st.spinner("Processing your voice..."):
         audio_bytes = audio_file.read()
-        response = st.session_state.chat_session.send_message(
-            message=[
-                "Listen to this audio clip from the child. It is in Hindi. Reply to them warmly in friendly Hindi text.",
-                {"data": audio_bytes, "mime_type": "audio/wav"}
-            ]
-        )
+        
+        # FIX: Wrap the audio bytes into a valid single Part object instead of using a list
+        audio_part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
+        response = st.session_state.chat_session.send_message(audio_part)
+        
         st.session_state.messages.append({"role": "user", "text": "🎤 [Sent a voice message]"})
         st.session_state.messages.append({"role": "assistant", "text": response.text})
         st.rerun()
