@@ -82,13 +82,20 @@ if audio_file and client:
     with st.spinner("Processing your voice..."):
         audio_bytes = audio_file.read()
         
-        # FIX: Wrap the audio bytes into a valid single Part object instead of using a list
-        audio_part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
-        response = st.session_state.chat_session.send_message(audio_part)
+        # DYNAMIC FIX: Automatically detect if it's audio/wav, audio/webm, or audio/ogg
+        detected_mime_type = audio_file.type  
         
-        st.session_state.messages.append({"role": "user", "text": "🎤 [Sent a voice message]"})
-        st.session_state.messages.append({"role": "assistant", "text": response.text})
-        st.rerun()
+        # Create the audio part with the correct format matching your browser
+        audio_part = types.Part.from_bytes(data=audio_bytes, mime_type=detected_mime_type)
+        
+        try:
+            response = st.session_state.chat_session.send_message(audio_part)
+            st.session_state.messages.append({"role": "user", "text": "🎤 [Sent a voice message]"})
+            st.session_state.messages.append({"role": "assistant", "text": response.text})
+            st.rerun()
+        except Exception as api_err:
+            st.error(f"Google API Error: {api_err}")
+            st.write("Tip: If voice errors persist, try typing in the chat bar below!")
 
 # Text fallback input
 user_text = st.chat_input("Or type your message here...")
